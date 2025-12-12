@@ -63,8 +63,8 @@ type TableDiff = {
           <tr *ngFor="let td of listResults">
             <td>{{td.table}}</td>
             <td>{{td.keyColumn || td.result?.keyColumn || '-'}}</td>
-            <td>{{td.result ? td.result.added?.length || 0 : '-'}}</td>
-            <td>{{td.result ? td.result.removed?.length || 0 : '-'}}</td>
+            <td>{{td.result ? td.result.added.length || 0 : '-'}}</td>
+            <td>{{td.result ? td.result.removed.length || 0 : '-'}}</td>
             <td>{{td.result ? countChanged(td.result) : '-'}}</td>
             <td>
               <span *ngIf="td.error" class="error">{{td.error}}</span>
@@ -130,11 +130,11 @@ type TableDiff = {
             </thead>
             <tbody>
               <ng-container *ngFor="let change of result.changed">
-                <tr *ngFor="let col of change.changedColumns">
+                <tr *ngFor="let col of columnsForChange(change)">
                   <td>{{change.key}}</td>
                   <td>{{col}}</td>
-                  <td>{{change.leftRow[col]}}</td>
-                  <td>{{change.rightRow[col]}}</td>
+                  <td [class.diff-changed]="isChanged(change, col)" [innerHTML]="cellHtml(change, col, 'left')"></td>
+                  <td [class.diff-changed]="isChanged(change, col)" [innerHTML]="cellHtml(change, col, 'right')"></td>
                 </tr>
               </ng-container>
             </tbody>
@@ -156,6 +156,9 @@ type TableDiff = {
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     th, td { border: 1px solid #ddd; padding: 4px 6px; }
     th { background: #fafafa; }
+    .diff-changed { background: #fff3cd; font-weight: 600; }
+    .diff-del { background: #f8d7da; text-decoration: line-through; }
+    .diff-add { background: #d4edda; }
   `]
 })
 export class AppComponent {
@@ -221,7 +224,113 @@ export class AppComponent {
     return Array.from(set);
   }
 
+  // For a single change, list ONLY the columns that actually changed.
+  // If backend provides changedColumns, use it directly; otherwise derive by comparing values.
+  columnsForChange(change: { leftRow: any; rightRow: any; changedColumns?: string[] }): string[] {
+    if (change?.changedColumns?.length) {
+      return change.changedColumns;
+    }
+    const set = new Set<string>();
+    if (change?.leftRow) Object.keys(change.leftRow).forEach(k => set.add(k));
+    if (change?.rightRow) Object.keys(change.rightRow).forEach(k => set.add(k));
+    const cols = Array.from(set);
+    return cols.filter(c => this.isChanged(change, c));
+  }
+
+  // Safe value getter to show null/undefined clearly
+  value(row: any, col: string): any {
+    const v = row ? row[col] : undefined;
+    return v === undefined ? '(null)' : v;
+  }
+
+  // Raw value without formatting
+  rawValue(row: any, col: string): any {
+    return row ? row[col] : undefined;
+  }
+
+  // Whether a given column changed (use provided changedColumns when available)
+  isChanged(change: { changedColumns?: string[]; leftRow: any; rightRow: any }, col: string): boolean {
+    if (change?.changedColumns?.length) return change.changedColumns.includes(col);
+    const l = change.leftRow ? change.leftRow[col] : undefined;
+    const r = change.rightRow ? change.rightRow[col] : undefined;
+    return l !== r;
+  }
+
+  // Count total number of cell-level changes rather than row-level entries
   countChanged(r: DiffResult): number {
-    return r?.changed?.length || 0;
+    if (!r?.changed?.length) return 0;
+    return r.changed.reduce((sum, ch: any) => {
+      if (Array.isArray(ch.changedColumns)) return sum + ch.changedColumns.length;
+      // fallback: compare keys across left/right
+      const cols = this.columnsForChange(ch);
+      return sum + cols.filter(c => this.isChanged(ch, c)).length;
+    }, 0);
+  }
+
+  // Render cell HTML with inline diff for changed string values
+  cellHtml(change: { leftRow: any; rightRow: any }, col: string, side: 'left' | 'right'): string {
+    const l = this.rawValue(change.leftRow, col);
+    const r = this.rawValue(change.rightRow, col);
+    if (l === r) {
+      return this.escapeHtml(this.value(side === 'left' ? change.leftRow : change.rightRow, col));
+    }
+    return this.inlineDiff(l, r, side);
+  }
+
+  // Simple inline diff using common prefix/suffix for strings; falls back to full highlight for non-strings
+  inlineDiff(left: any, right: any, side: 'left' | 'right'): string {
+    const lNull = left === undefined || left === null;
+    const rNull = right === undefined || right === null;
+
+    // If one side missing, highlight entire existing value
+    if (lNull || rNull) {
+      const v = side === 'left' ? left : right;
+      const text = v === undefined || v === null ? '(null)' : String(v);
+      const esc = this.escapeHtml(text);
+      const cls = side === 'left' ? 'diff-del' : 'diff-add';
+      return `<span class="${cls}">${esc}</span>`;
+    }
+
+    const lStr = String(left);
+    const rStr = String(right);
+
+    // If not both strings (e.g., objects), just show whole value highlighted
+    if (typeof left !== 'string' && typeof right !== 'string') {
+      const v = side === 'left' ? lStr : rStr;
+      const cls = side === 'left' ? 'diff-del' : 'diff-add';
+      return `<span class="${cls}">${this.escapeHtml(v)}</span>`;
+    }
+
+    // Find common prefix
+    let start = 0;
+    const minLen = Math.min(lStr.length, rStr.length);
+    while (start < minLen && lStr[start] === rStr[start]) start++;
+
+    // Find common suffix without overlapping prefix
+    let endL = lStr.length - 1;
+    let endR = rStr.length - 1;
+    while (endL >= start && endR >= start && lStr[endL] === rStr[endR]) { endL--; endR--; }
+
+    const prefix = lStr.substring(0, start);
+    const lMid = lStr.substring(start, endL + 1);
+    const rMid = rStr.substring(start, endR + 1);
+    const suffix = lStr.substring(endL + 1); // same as rStr.substring(endR+1)
+
+    if (side === 'left') {
+      return this.escapeHtml(prefix) + (lMid ? `<span class="diff-del">${this.escapeHtml(lMid)}</span>` : '') + this.escapeHtml(suffix);
+    } else {
+      return this.escapeHtml(prefix) + (rMid ? `<span class="diff-add">${this.escapeHtml(rMid)}</span>` : '') + this.escapeHtml(suffix);
+    }
+  }
+
+  // Escape HTML special chars to prevent injection when using innerHTML
+  escapeHtml(input: any): string {
+    const s = input == null ? '' : String(input);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }
