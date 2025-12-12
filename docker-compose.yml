@@ -1,0 +1,18 @@
+version: '3.8'
+services:
+  oracle-db-1:
+    build:
+      context: ./db/oracle-mock-1
+      dockerfile: Dockerfile
+    ports:
+      - "1521:1521"
+    environment:
+      - ORACLE_PASSWORD=Oracle123
+  oracle-db-2:
+    build:
+      context: ./db/oracle-mock-2
+      dockerfile: Dockerfile
+    ports:
+      - "1522:1521"
+    environment:
+      - ORACLE_PASSWORD=Oracle123

@@ -11,6 +11,13 @@ type DiffResult = {
   changed: { key: string; leftRow: any; rightRow: any; changedColumns: string[] }[];
 };
 
+type TableDiff = {
+  table: string;
+  keyColumn?: string | null;
+  result?: DiffResult | null;
+  error?: string | null;
+};
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -32,10 +39,41 @@ type DiffResult = {
         <input name="key" required [(ngModel)]="key" placeholder="e.g. EMPLOYEE_ID" />
       </label>
       <button type="submit">Compare</button>
+      <button type="button" (click)="compareListedTables()">Compare listed tables</button>
       <span class="error" *ngIf="error">{{error}}</span>
     </form>
 
     <section *ngIf="loading">Loading...</section>
+
+    <section *ngIf="listResults">
+      <h2>Listed tables result</h2>
+      <div *ngIf="!listResults?.length">No entries</div>
+      <table *ngIf="listResults?.length">
+        <thead>
+          <tr>
+            <th>Table</th>
+            <th>Key</th>
+            <th>Added</th>
+            <th>Removed</th>
+            <th>Changed</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let td of listResults">
+            <td>{{td.table}}</td>
+            <td>{{td.keyColumn || td.result?.keyColumn || '-'}}</td>
+            <td>{{td.result ? td.result.added?.length || 0 : '-'}}</td>
+            <td>{{td.result ? td.result.removed?.length || 0 : '-'}}</td>
+            <td>{{td.result ? countChanged(td.result) : '-'}}</td>
+            <td>
+              <span *ngIf="td.error" class="error">{{td.error}}</span>
+              <span *ngIf="!td.error">OK</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
     <section *ngIf="result">
       <h2>Summary</h2>
@@ -127,6 +165,7 @@ export class AppComponent {
   loading = false;
   error: string | null = null;
   result: DiffResult | null = null;
+  listResults: TableDiff[] | null = null;
 
   backendBaseUrl = (window as any)["BACKEND_BASE_URL"] || 'http://localhost:8080';
 
@@ -134,6 +173,7 @@ export class AppComponent {
     ev.preventDefault();
     this.error = null;
     this.result = null;
+    this.listResults = null;
     if (!this.table || !this.key) {
       this.error = 'Please enter required fields: table and key.';
       return;
@@ -154,10 +194,34 @@ export class AppComponent {
     }
   }
 
+  async compareListedTables() {
+    this.error = null;
+    this.result = null;
+    this.listResults = null;
+    this.loading = true;
+    try {
+      const params = new URLSearchParams();
+      if (this.schema) params.set('schema', this.schema);
+      if (this.key) params.set('key', this.key);
+      params.set('detectPk', 'true');
+      const resp = await fetch(`${this.backendBaseUrl}/api/diff/tables?${params.toString()}`);
+      if (!resp.ok) throw new Error(await resp.text());
+      this.listResults = await resp.json();
+    } catch (e: any) {
+      this.error = e?.message || 'Request failed';
+    } finally {
+      this.loading = false;
+    }
+  }
+
   columns(rows: any[]): string[] {
     if (!rows || !rows.length) return [];
     const set = new Set<string>();
     rows.forEach(r => Object.keys(r).forEach(k => set.add(k)));
     return Array.from(set);
+  }
+
+  countChanged(r: DiffResult): number {
+    return r?.changed?.length || 0;
   }
 }
