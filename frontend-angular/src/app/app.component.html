@@ -1,0 +1,150 @@
+<mat-toolbar color="primary">
+  <span>Oracle DB Diff Viewer</span>
+  <span class="spacer"></span>
+</mat-toolbar>
+
+<div class="container">
+  <mat-card>
+    <form (submit)="onSubmit($event)" class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Schema</mat-label>
+        <input matInput name="schema" [(ngModel)]="schema" placeholder="e.g. HR" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Table</mat-label>
+        <input matInput name="table" required [(ngModel)]="table" placeholder="e.g. EMPLOYEES" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Key column</mat-label>
+        <input matInput name="key" required [(ngModel)]="key" placeholder="e.g. EMPLOYEE_ID" />
+      </mat-form-field>
+
+      <div class="actions">
+        <button mat-raised-button color="primary" type="submit">Compare</button>
+        <button mat-raised-button color="accent" type="button" (click)="compareListedTables()">Compare listed tables by ID</button>
+      </div>
+
+      <div *ngIf="error" class="error" style="margin-top:8px;">{{error}}</div>
+    </form>
+  </mat-card>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate" style="margin:12px 0;"></mat-progress-bar>
+
+  <mat-card *ngIf="listResults">
+    <mat-card-title>Listed tables result</mat-card-title>
+    <div *ngIf="!listResults?.length">No entries</div>
+    <div *ngIf="listResults?.length">
+      <table mat-table [dataSource]="listResults" class="mat-elevation-z2">
+
+        <ng-container matColumnDef="table">
+          <th mat-header-cell *matHeaderCellDef>Table</th>
+          <td mat-cell *matCellDef="let td">
+            <a href="#" title="Open detailed diff" (click)="openTableDiff($event, td)">{{td.table}}</a>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="key">
+          <th mat-header-cell *matHeaderCellDef>Key</th>
+          <td mat-cell *matCellDef="let td">{{td.keyColumn || td.result?.keyColumn || '-'}}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="added">
+          <th mat-header-cell *matHeaderCellDef>Added</th>
+          <td mat-cell *matCellDef="let td">{{td.result ? td.result.added.length || 0 : '-'}}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="removed">
+          <th mat-header-cell *matHeaderCellDef>Removed</th>
+          <td mat-cell *matCellDef="let td">{{td.result ? td.result.removed.length || 0 : '-'}}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="changed">
+          <th mat-header-cell *matHeaderCellDef>Changed</th>
+          <td mat-cell *matCellDef="let td">{{td.result ? countChanged(td.result) : '-'}}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let td">
+            <span *ngIf="td.error" class="error">{{td.error}}</span>
+            <span *ngIf="!td.error">OK</span>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="listDisplayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: listDisplayedColumns;"></tr>
+      </table>
+    </div>
+  </mat-card>
+
+  <mat-card *ngIf="result">
+    <mat-card-title>Summary</mat-card-title>
+    <mat-card-content>
+      <p>
+        Schema: {{result.schema || '(default)'}}, Table: {{result.table}}, Key: {{result.keyColumn}}
+      </p>
+
+      <div class="cards">
+        <mat-card>
+          <mat-card-title>Added (in DB2 only)</mat-card-title>
+          <div *ngIf="!result.added?.length">None</div>
+          <div *ngIf="result.added?.length">
+            <table mat-table [dataSource]="result.added" class="mat-elevation-z1">
+              <ng-container *ngFor="let col of columns(result.added)" [matColumnDef]="col">
+                <th mat-header-cell *matHeaderCellDef>{{col}}</th>
+                <td mat-cell *matCellDef="let row">{{row[col]}}</td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="columns(result.added)"></tr>
+              <tr mat-row *matRowDef="let row; columns: columns(result.added);"></tr>
+            </table>
+          </div>
+        </mat-card>
+
+        <mat-card>
+          <mat-card-title>Removed (in DB1 only)</mat-card-title>
+          <div *ngIf="!result.removed?.length">None</div>
+          <div *ngIf="result.removed?.length">
+            <table mat-table [dataSource]="result.removed" class="mat-elevation-z1">
+              <ng-container *ngFor="let col of columns(result.removed)" [matColumnDef]="col">
+                <th mat-header-cell *matHeaderCellDef>{{col}}</th>
+                <td mat-cell *matCellDef="let row">{{row[col]}}</td>
+              </ng-container>
+              <tr mat-header-row *matHeaderRowDef="columns(result.removed)"></tr>
+              <tr mat-row *matRowDef="let row; columns: columns(result.removed);"></tr>
+            </table>
+          </div>
+        </mat-card>
+
+        <mat-card>
+          <mat-card-title>Changed (present in both)</mat-card-title>
+          <div *ngIf="!result.changed?.length">None</div>
+          <div *ngIf="result.changed?.length">
+            <!-- Use a plain table for flexibility (colspan, nested rows). -->
+            <table class="mat-elevation-z1" style="width:100%">
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Column</th>
+                  <th>DB1</th>
+                  <th>DB2</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let change of result.changed">
+                  <tr *ngFor="let col of columnsForChange(change)">
+                    <td>{{change.key}}</td>
+                    <td>{{col}}</td>
+                    <td [class.diff-changed]="isChanged(change, col)" [innerHTML]="cellHtml(change, col, 'left')"></td>
+                    <td [class.diff-changed]="isChanged(change, col)" [innerHTML]="cellHtml(change, col, 'right')"></td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+        </mat-card>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

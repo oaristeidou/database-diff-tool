@@ -1,0 +1,14 @@
+.container { font-family: system-ui, sans-serif; padding: 16px; }
+form { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 16px; }
+label { display: flex; flex-direction: column; font-size: 12px; }
+input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; min-width: 200px; }
+button { padding: 8px 12px; }
+.error { color: #b00020; margin-left: 8px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { border: 1px solid #ddd; padding: 4px 6px; }
+th { background: #fafafa; }
+.diff-changed { background: #fff3cd; font-weight: 600; }
+.diff-del { background: #f8d7da; text-decoration: line-through; }
+.diff-add { background: #d4edda; }
