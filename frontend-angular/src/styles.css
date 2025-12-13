@@ -5,15 +5,4 @@
 html, body { height: 100%; margin: 0; }
 body { font-family: Roboto, Arial, sans-serif; }
 
-.container { padding: 16px; max-width: 1200px; margin: 0 auto; }
-
-.error { color: #d32f2f; }
-
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-
-/* Diff highlight classes retained for innerHTML rendering */
-.diff-add { background: #e8f5e9; color: #2e7d32; padding: 0 2px; border-radius: 2px; }
-.diff-del { background: #ffebee; color: #c62828; padding: 0 2px; border-radius: 2px; }
-.diff-changed { background: #fff8e1; }
-
-table.mat-mdc-table { width: 100%; }
+.container { padding: 16px; max-width: 1600px; margin: 0 auto; }
