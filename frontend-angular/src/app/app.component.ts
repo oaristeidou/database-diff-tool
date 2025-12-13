@@ -39,7 +39,7 @@ type TableDiff = {
         <input name="key" required [(ngModel)]="key" placeholder="e.g. EMPLOYEE_ID" />
       </label>
       <button type="submit">Compare</button>
-      <button type="button" (click)="compareListedTables()">Compare listed tables</button>
+      <button type="button" (click)="compareListedTables()">Compare listed tables by ID</button>
       <span class="error" *ngIf="error">{{error}}</span>
     </form>
 
@@ -61,7 +61,10 @@ type TableDiff = {
         </thead>
         <tbody>
           <tr *ngFor="let td of listResults">
-            <td>{{td.table}}</td>
+            <td>
+              <a href="#" title="Open detailed diff"
+                 (click)="openTableDiff($event, td)">{{td.table}}</a>
+            </td>
             <td>{{td.keyColumn || td.result?.keyColumn || '-'}}</td>
             <td>{{td.result ? td.result.added.length || 0 : '-'}}</td>
             <td>{{td.result ? td.result.removed.length || 0 : '-'}}</td>
@@ -172,6 +175,36 @@ export class AppComponent {
 
   backendBaseUrl = (window as any)["BACKEND_BASE_URL"] || 'http://localhost:8080';
 
+  async openTableDiff(ev: Event, td: TableDiff) {
+    ev.preventDefault();
+    this.error = null;
+    // Keep listResults so user can navigate between tables
+    this.result = null;
+    const table = td.table;
+    const key = td.keyColumn || td.result?.keyColumn || (this.key && this.key.trim() ? this.key : '');
+    if (!key) {
+      this.error = `No key available to open diff for table ${table}.`;
+      return;
+    }
+    // reflect selection in the form inputs for transparency
+    this.table = table;
+    this.key = key;
+    this.loading = true;
+    try {
+      const params = new URLSearchParams();
+      if (this.schema) params.set('schema', this.schema);
+      params.set('table', table);
+      params.set('key', key);
+      const resp = await fetch(`${this.backendBaseUrl}/api/diff?${params.toString()}`);
+      if (!resp.ok) throw new Error(await resp.text());
+      this.result = await resp.json();
+    } catch (e: any) {
+      this.error = e?.message || 'Request failed';
+    } finally {
+      this.loading = false;
+    }
+  }
+
   async onSubmit(ev: Event) {
     ev.preventDefault();
     this.error = null;
@@ -205,8 +238,10 @@ export class AppComponent {
     try {
       const params = new URLSearchParams();
       if (this.schema) params.set('schema', this.schema);
-      if (this.key) params.set('key', this.key);
-      params.set('detectPk', 'true');
+      // Compare all listed tables by ID (default) unless user explicitly provides a key
+      params.set('key', this.key && this.key.trim() ? this.key : 'ID');
+      // Force no PK detection so we always compare by the provided key (ID by default)
+      params.set('detectPk', 'false');
       const resp = await fetch(`${this.backendBaseUrl}/api/diff/tables?${params.toString()}`);
       if (!resp.ok) throw new Error(await resp.text());
       this.listResults = await resp.json();
@@ -224,17 +259,17 @@ export class AppComponent {
     return Array.from(set);
   }
 
-  // For a single change, list ONLY the columns that actually changed.
-  // If backend provides changedColumns, use it directly; otherwise derive by comparing values.
+  // For a single change, list ALL columns present in either side so the user can see full context.
+  // Differences will be highlighted cell-by-cell; unchanged cells will be shown normally.
   columnsForChange(change: { leftRow: any; rightRow: any; changedColumns?: string[] }): string[] {
-    if (change?.changedColumns?.length) {
-      return change.changedColumns;
-    }
     const set = new Set<string>();
     if (change?.leftRow) Object.keys(change.leftRow).forEach(k => set.add(k));
     if (change?.rightRow) Object.keys(change.rightRow).forEach(k => set.add(k));
-    const cols = Array.from(set);
-    return cols.filter(c => this.isChanged(change, c));
+    // If neither side provided keys (edge case), fall back to changedColumns list if available
+    if (set.size === 0 && change?.changedColumns?.length) {
+      change.changedColumns.forEach(k => set.add(k));
+    }
+    return Array.from(set);
   }
 
   // Safe value getter to show null/undefined clearly
