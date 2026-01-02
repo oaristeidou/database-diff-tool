@@ -20,11 +20,16 @@ BEGIN
 END;
 /
 
-BEGIN drop_table_if_exists('SYSTEM', 'CUSTOMERS'); END; /
-BEGIN drop_table_if_exists('SYSTEM', 'PRODUCTS'); END; /
-BEGIN drop_table_if_exists('SYSTEM', 'ORDERS'); END; /
-BEGIN drop_table_if_exists('SYSTEM', 'EMPLOYEES'); END; /
-BEGIN drop_table_if_exists('SYSTEM', 'DEPARTMENTS'); END; /
+BEGIN drop_table_if_exists('SYSTEM', 'CUSTOMERS'); END;
+/
+BEGIN drop_table_if_exists('SYSTEM', 'PRODUCTS'); END;
+/
+BEGIN drop_table_if_exists('SYSTEM', 'ORDERS'); END;
+/
+BEGIN drop_table_if_exists('SYSTEM', 'EMPLOYEES'); END;
+/
+BEGIN drop_table_if_exists('SYSTEM', 'DEPARTMENTS'); END;
+/
 
 -- CUSTOMERS
 CREATE TABLE SYSTEM.CUSTOMERS (

@@ -26,8 +26,8 @@ ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_19_10
 
 USER oracle
 # Copy init script to the PDB startup directory.
-# This ensures it runs inside the PDB after it has been created.
-COPY init-db.sql /opt/oracle/scripts/startup/01-init-db.sql
+# The gvenzl image looks for scripts in /container-entrypoint-initdb.d/ for initialization
+COPY --chown=oracle:dba init-db.sql /container-entrypoint-initdb.d/01-init-db.sql
 
 # Expose Oracle listener and EM Express (if enabled)
 EXPOSE 1521 5500
